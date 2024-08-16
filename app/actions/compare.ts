@@ -1,14 +1,11 @@
+"use server";
+
+import ApplicationSingleton from "@/app/app";
 import {
-  RawImage,
-  AutoProcessor,
-  CLIPVisionModelWithProjection,
   type PreTrainedModel,
   type Processor,
-  env,
+  RawImage,
 } from "@xenova/transformers";
-
-// Skip local model check
-env.allowLocalModels = false;
 
 const cosineSimilarity = (
   query_embeds: Float32Array,
@@ -38,41 +35,9 @@ const cosineSimilarity = (
   return dotProduct / (Math.sqrt(normQuery) * Math.sqrt(normAns));
 };
 
-// Use the Singleton pattern to enable lazy construction of the pipeline.
-class PipelineSingleton {
-  static model_id = "Xenova/clip-vit-base-patch16";
-  static processor: Promise<Processor> | null = null;
-  static vision_model: Promise<PreTrainedModel> | null = null;
-
-  static async getInstance() {
-    if (this.processor === null) {
-      this.processor = AutoProcessor.from_pretrained(this.model_id);
-    }
-
-    if (this.vision_model === null) {
-      this.vision_model = CLIPVisionModelWithProjection.from_pretrained(
-        this.model_id,
-        {
-          quantized: false,
-        }
-      );
-    }
-
-    return Promise.all([this.processor, this.vision_model]);
-  }
-}
-
-// Listen for messages from the main thread
-self.addEventListener("message", async (event) => {
-  // Retrieve the classification pipeline. When called for the first time,
-  // this will load the pipeline and save it for future use.
-
-  const [processor, vision_model] = await PipelineSingleton.getInstance();
-
-  const { query_image, ans_image } = event.data;
-
-  console.log("query_image", query_image);
-  console.log("ans_image", ans_image);
+export async function compare(query_image: string, ans_image: string) {
+  const [processor, vision_model]: [Processor, PreTrainedModel] =
+    await ApplicationSingleton.getInstance();
 
   // Read the two images as raw images
   const rawImageQuery = await (
@@ -100,9 +65,5 @@ self.addEventListener("message", async (event) => {
 
   const similarity = cosineSimilarity(queryEmbedsArray, ansEmbedsArray, 128);
 
-  // Send the output back to the main thread
-  self.postMessage({
-    status: "complete",
-    output: similarity,
-  });
-});
+  return similarity;
+}
