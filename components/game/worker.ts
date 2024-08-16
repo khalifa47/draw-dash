@@ -58,54 +58,72 @@ class PipelineSingleton {
   }
 }
 
-// Function to perform the similarity check with a timeout
-const calculateSimilarity = async (query_image: string, ans_image: string) => {
-  const [processor, vision_model] = await PipelineSingleton.getInstance();
+// Function to perform the similarity check with timeout logic
+const calculateSimilarity = async (
+  query_image: string,
+  ans_image: string,
+  timeoutDuration: number
+): Promise<number> => {
+  return new Promise<number>(async (resolve, reject) => {
+    // Create a timeout
+    const timeoutId = setTimeout(() => {
+      resolve(0); // Resolve with similarity of 0 if timeout occurs
+    }, timeoutDuration);
 
-  // Read the two images as raw images
-  const rawImageQuery = await RawImage.fromURL(query_image);
-  const rawImageAns = await RawImage.fromURL(ans_image);
+    try {
+      // Begin processing
+      const [processor, vision_model] = await PipelineSingleton.getInstance();
 
-  // Tokenize the two images
-  const tokenizedImageQuery = await processor(rawImageQuery);
-  const tokenizedImageAns = await processor(rawImageAns);
+      const rawImageQuery = await RawImage.fromURL(query_image);
+      const rawImageAns = await RawImage.fromURL(ans_image);
 
-  // Encode the two images
-  const { image_embeds: embedsQuery } = await vision_model(tokenizedImageQuery);
-  const { image_embeds: embedsAns } = await vision_model(tokenizedImageAns);
+      const tokenizedImageQuery = await processor(rawImageQuery);
+      const tokenizedImageAns = await processor(rawImageAns);
 
-  // Convert embeddings to Float32Array for memory efficiency
-  const queryEmbedsArray = new Float32Array(
-    Object.values(embedsQuery.data) as number[]
-  );
-  const ansEmbedsArray = new Float32Array(
-    Object.values(embedsAns.data) as number[]
-  );
+      const { image_embeds: embedsQuery } = await vision_model(
+        tokenizedImageQuery
+      );
+      const { image_embeds: embedsAns } = await vision_model(tokenizedImageAns);
 
-  return cosineSimilarity(queryEmbedsArray, ansEmbedsArray);
+      const queryEmbedsArray = new Float32Array(
+        Object.values(embedsQuery.data) as number[]
+      );
+      const ansEmbedsArray = new Float32Array(
+        Object.values(embedsAns.data) as number[]
+      );
+
+      const similarity = cosineSimilarity(queryEmbedsArray, ansEmbedsArray);
+
+      clearTimeout(timeoutId); // Clear the timeout if calculation completes in time
+      resolve(similarity);
+    } catch (error) {
+      clearTimeout(timeoutId); // Clear the timeout in case of error
+      reject(error); // Optionally handle errors separately
+    }
+  });
 };
 
 // Listen for messages from the main thread
 self.addEventListener("message", async (event) => {
-  // Retrieve the classification pipeline. When called for the first time,
-  // this will load the pipeline and save it for future use.
-
   const { query_image, ans_image } = event.data;
 
-  // Timeout promise
-  const timeout = new Promise<number>(
-    (resolve) => setTimeout(() => resolve(0), 15000) // Resolve with 0 similarity after 15 seconds
-  );
+  try {
+    const similarity = await calculateSimilarity(
+      query_image,
+      ans_image,
+      15000 // Set timeout to 15 seconds
+    );
 
-  // Race between the similarity calculation and the timeout
-  const similarity = await Promise.race([
-    calculateSimilarity(query_image, ans_image),
-    timeout,
-  ]);
-
-  // Send the output back to the main thread
-  self.postMessage({
-    status: "complete",
-    output: similarity,
-  });
+    // Send the output back to the main thread
+    self.postMessage({
+      status: "complete",
+      output: similarity,
+    });
+  } catch (error) {
+    // Handle any potential errors here
+    self.postMessage({
+      status: "complete",
+      output: 0, // Return 0 if there's an error
+    });
+  }
 });
