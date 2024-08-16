@@ -59,7 +59,7 @@ const MatchScreen: React.FC<MatchScreenProps> = ({
           setReady(true);
           break;
         case "complete":
-          setSimilarity(e.data.output);
+          setSimilarity(e.data.output ? e.data.output : 0);
           setLoadingComparison(false);
           break;
       }
