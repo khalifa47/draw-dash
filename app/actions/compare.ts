@@ -37,8 +37,12 @@ export async function compare(query_image: string, ans_image: string) {
     await ApplicationSingleton.getInstance();
 
   // Read the two images as raw images
-  const rawImageQuery = await RawImage.fromURL(query_image);
-  const rawImageAns = await RawImage.fromURL(ans_image);
+  const rawImageQuery = await (
+    await RawImage.fromURL(query_image)
+  ).resize(512, 512);
+  const rawImageAns = await (
+    await RawImage.fromURL(ans_image)
+  ).resize(512, 512);
 
   // Tokenize the two images
   const tokenizedImageQuery = await processor(rawImageQuery);
