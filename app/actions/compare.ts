@@ -7,7 +7,10 @@ import {
   RawImage,
 } from "@xenova/transformers";
 
-const cosineSimilarity = (query_embeds: number[], ans_embeds: number[]) => {
+const cosineSimilarity = (
+  query_embeds: Float32Array,
+  ans_embeds: Float32Array
+) => {
   if (query_embeds.length !== ans_embeds.length) {
     throw new Error("Embeddings must be of the same length");
   }
@@ -45,10 +48,15 @@ export async function compare(query_image: string, ans_image: string) {
   const { image_embeds: embedsQuery } = await vision_model(tokenizedImageQuery);
   const { image_embeds: embedsAns } = await vision_model(tokenizedImageAns);
 
-  const similarity = cosineSimilarity(
-    Object.values(embedsQuery.data),
-    Object.values(embedsAns.data)
+  // Directly convert the embeddings to Float32Array for memory efficiency
+  const queryEmbedsArray = new Float32Array(
+    Object.values(embedsQuery.data) as number[]
   );
+  const ansEmbedsArray = new Float32Array(
+    Object.values(embedsAns.data) as number[]
+  );
+
+  const similarity = cosineSimilarity(queryEmbedsArray, ansEmbedsArray);
 
   return similarity;
 }
