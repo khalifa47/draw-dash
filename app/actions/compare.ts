@@ -9,7 +9,8 @@ import {
 
 const cosineSimilarity = (
   query_embeds: Float32Array,
-  ans_embeds: Float32Array
+  ans_embeds: Float32Array,
+  chunkSize: number
 ) => {
   if (query_embeds.length !== ans_embeds.length) {
     throw new Error("Embeddings must be of the same length");
@@ -19,17 +20,19 @@ const cosineSimilarity = (
   let normQuery = 0;
   let normAns = 0;
 
-  for (let i = 0; i < query_embeds.length; ++i) {
-    const queryValue = query_embeds[i];
-    const dbValue = ans_embeds[i];
+  for (let i = 0; i < query_embeds.length; i += chunkSize) {
+    const end = Math.min(i + chunkSize, query_embeds.length);
+    for (let j = i; j < end; ++j) {
+      const queryValue = query_embeds[j];
+      const dbValue = ans_embeds[j];
 
-    dotProduct += queryValue * dbValue;
-    normQuery += queryValue * queryValue;
-    normAns += dbValue * dbValue;
+      dotProduct += queryValue * dbValue;
+      normQuery += queryValue * queryValue;
+      normAns += dbValue * dbValue;
+    }
   }
 
-  const similarity = dotProduct / (Math.sqrt(normQuery) * Math.sqrt(normAns));
-  return similarity;
+  return dotProduct / (Math.sqrt(normQuery) * Math.sqrt(normAns));
 };
 
 export async function compare(query_image: string, ans_image: string) {
@@ -39,10 +42,10 @@ export async function compare(query_image: string, ans_image: string) {
   // Read the two images as raw images
   const rawImageQuery = await (
     await RawImage.fromURL(query_image)
-  ).resize(512, 512);
+  ).resize(256, 256);
   const rawImageAns = await (
     await RawImage.fromURL(ans_image)
-  ).resize(512, 512);
+  ).resize(256, 256);
 
   // Tokenize the two images
   const tokenizedImageQuery = await processor(rawImageQuery);
@@ -60,7 +63,7 @@ export async function compare(query_image: string, ans_image: string) {
     Object.values(embedsAns.data) as number[]
   );
 
-  const similarity = cosineSimilarity(queryEmbedsArray, ansEmbedsArray);
+  const similarity = cosineSimilarity(queryEmbedsArray, ansEmbedsArray, 128);
 
   return similarity;
 }
